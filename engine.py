@@ -1,28 +1,46 @@
 import tdl
+import colors
+from entity import Entity
 from input_handler import handle_keys
+from render_functions import clear_all, render_all
+from map_utils import make_map
 
 
 def main():
     # initializations
     screen_width = 80
     screen_height = 50
+    map_width = 80
+    map_height = 45
 
-    player_x = int(screen_width / 2)  # int() because these can't be floats
-    player_y = int(screen_height / 2)
+    game_colors = {
+        'dark_wall': (0, 0, 100),
+        'dark_ground': (50, 50, 150)
+    }
+
+    player = Entity(int(screen_width / 2), int(screen_height / 2), '@', colors.white)
+    npc = Entity(int(screen_width / 2 - 5), int(screen_height / 2 - 5), '@', colors.red)
+    entities = [npc, player]  # list to store all entities on map
 
     tdl.set_font('arial10x10.png', greyscale=True, altLayout=True)
 
     root_console = tdl.init(screen_width, screen_height, title='Roguelike')
     con = tdl.Console(screen_width, screen_height)
 
+    # create map
+    game_map = tdl.map.Map(map_width, map_height)
+    make_map(game_map)
+
     # MAIN GAME LOOP
 
     while not tdl.event.is_window_closed():
-        con.draw_char(player_x, player_y, '@', fg=(255, 255, 255), bg=None)  # draws player
-        root_console.blit(con, 0, 0, screen_width, screen_height, 0, 0)
+        # render all entities
+        render_all(con, entities, game_map, root_console, screen_width, screen_height, game_colors)
+
         tdl.flush()
 
-        con.draw_char(player_x, player_y, ' ', bg=None)  # redraws over old player position
+        # clear entities last position
+        clear_all(con, entities)
 
         # event handling
         for event in tdl.event.get():
@@ -43,8 +61,8 @@ def main():
 
         if move:  # move key pressed
             dx, dy = move
-            player_x += dx
-            player_y += dy
+            if game_map.walkable[player.x + dx, player.y + dy]:
+                player.move(dx, dy)
 
         if exit:  # exit game
             return True
