@@ -1,4 +1,7 @@
-def render_all(con, entities, game_map, fov_recompute, root_console, screen_width, screen_height, colors):
+import colors
+
+
+def render_all(con, entities, game_map, fov_recompute, root_console, screen_width, screen_height):
     if fov_recompute:
         # draw all tiles in map
         for x, y in game_map:
@@ -6,17 +9,17 @@ def render_all(con, entities, game_map, fov_recompute, root_console, screen_widt
 
             if game_map.fov[x, y]:
                 if wall:
-                    con.draw_char(x, y, None, fg=None, bg=colors.get('light_wall'))
+                    con.draw_char(x, y, None, fg=None, bg=colors.light_wall)
                 else:
-                    con.draw_char(x, y, None, fg=None, bg=colors.get('light_ground'))
+                    con.draw_char(x, y, None, fg=None, bg=colors.light_ground)
 
                 game_map.explored[x][y] = True
 
             elif game_map.explored[x][y]:
                 if wall:
-                    con.draw_char(x, y, None, fg=None, bg=colors.get('dark_wall'))
+                    con.draw_char(x, y, None, fg=None, bg=colors.dark_wall)
                 else:
-                    con.draw_char(x, y, None, fg=None, bg=colors.get('dark_ground'))
+                    con.draw_char(x, y, None, fg=None, bg=colors.dark_ground)
 
     # draw all entities in list
     for entity in entities:

@@ -1,92 +1,108 @@
 import tdl
 import colors
-from entity import Entity
+from entity import Entity, get_blocking_entities_at_location
+from game_states import GameStates
 from input_handler import handle_keys
 from render_functions import clear_all, render_all
 from map_utils import GameMap, make_map
 
 
 def main():
-    # initializations
-    screen_width = 80
-    screen_height = 50
-    map_width = 80
-    map_height = 45
+	# initializations
+	screen_width = 80
+	screen_height = 50
+	map_width = 80
+	map_height = 45
 
-    room_max_size = 10
-    room_min_size = 6
-    max_rooms = 30
+	room_max_size = 10
+	room_min_size = 6
+	max_rooms = 30
 
-    fov_algorithm = 'BASIC'
-    fov_light_walls = True
-    fov_radius = 10
+	fov_algorithm = 'BASIC'
+	fov_light_walls = True
+	fov_radius = 10
 
-    game_colors = {
-        'dark_wall': (0, 0, 100),
-        'dark_ground': (50, 50, 150),
-        'light_wall': (130, 110, 50),
-        'light_ground': (200, 180, 50)
-    }
+	max_monster_per_room = 3
 
-    player = Entity(int(screen_width / 2), int(screen_height / 2), '@', colors.white)
-    entities = [player]  # list to store all entities on map
+	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True)
+	entities = [player]  # list to store all entities on map
 
-    tdl.set_font('arial10x10.png', greyscale=True, altLayout=True)
+	tdl.set_font('arial10x10.png', greyscale=True, altLayout=True)
 
-    root_console = tdl.init(screen_width, screen_height, title='Roguelike')
-    con = tdl.Console(screen_width, screen_height)
+	root_console = tdl.init(screen_width, screen_height, title='Roguelike')
+	con = tdl.Console(screen_width, screen_height)
 
-    # create map
-    game_map = GameMap(map_width, map_height)
-    make_map(game_map, max_rooms, room_min_size, room_max_size, map_width, map_height, player)
+	# create map
+	game_map = GameMap(map_width, map_height)
+	make_map(game_map, max_rooms, room_min_size, room_max_size, map_width, map_height, player,
+			 entities, max_monster_per_room)
 
-    fov_recompute = True
+	fov_recompute = True
 
-    # MAIN GAME LOOP
+	game_state = GameStates.PLAYERS_TURN
 
-    while not tdl.event.is_window_closed():
-        if fov_recompute:
-            game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
-        # render all entities
-        render_all(con, entities, game_map, fov_recompute, root_console, screen_width, screen_height, game_colors)
+	# MAIN GAME LOOP
 
-        tdl.flush()
+	while not tdl.event.is_window_closed():
+		if fov_recompute:
+			game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
+		# render all entities
+		render_all(con, entities, game_map, fov_recompute, root_console, screen_width, screen_height)
 
-        # clear entities last position
-        clear_all(con, entities)
+		tdl.flush()
 
-        fov_recompute = False
+		# clear entities last position
+		clear_all(con, entities)
 
-        # event handling
-        for event in tdl.event.get():
-            if event.type == 'KEYDOWN':
-                user_input = event
-                break
-        else:
-            user_input = None
+		fov_recompute = False
 
-        if not user_input:
-            continue
+		# event handling
+		for event in tdl.event.get():
+			if event.type == 'KEYDOWN':
+				user_input = event
+				break
+		else:
+			user_input = None
 
-        action = handle_keys(user_input)  # check what key was pressed
+		if not user_input:
+			continue
 
-        move = action.get('move')
-        exit = action.get('exit')
-        fullscreen = action.get('fullscreen')
+		action = handle_keys(user_input)  # check what key was pressed
 
-        if move:  # move key pressed
-            dx, dy = move
-            if game_map.walkable[player.x + dx, player.y + dy]:
-                player.move(dx, dy)
+		move = action.get('move')
+		exit_game = action.get('exit')
+		fullscreen = action.get('fullscreen')
 
-                fov_recompute = True
+		if move and game_state == GameStates.PLAYERS_TURN:  # move key pressed
+			dx, dy = move
+			destination_x = player.x + dx
+			destination_y = player.y + dy
 
-        if exit:  # exit game
-            return True
+			if game_map.walkable[destination_x, destination_y]:
+				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
 
-        if fullscreen:  # set fullscreen
-            tdl.set_fullscreen(not tdl.get_fullscreen())
+				if target:
+					print('You kick the ' + target.name + ' in the shins, much to its annoyance!')
+				else:
+					player.move(dx, dy)
+
+					fov_recompute = True
+
+				game_state = GameStates.ENEMY_TURN
+
+		if exit_game:  # exit game
+			return True
+
+		if fullscreen:  # set fullscreen
+			tdl.set_fullscreen(not tdl.get_fullscreen())
+
+		if game_state == GameStates.ENEMY_TURN:
+			for entity in entities:
+				if entity != player:
+					print('The ' + entity.name + ' ponders the meaning of its existence.')
+
+			game_state = GameStates.PLAYERS_TURN
 
 
 if __name__ == '__main__':
-    main()
+	main()
