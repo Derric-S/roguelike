@@ -3,7 +3,7 @@ import colors
 from entity import Entity
 from input_handler import handle_keys
 from render_functions import clear_all, render_all
-from map_utils import make_map
+from map_utils import GameMap, make_map
 
 
 def main():
@@ -17,9 +17,15 @@ def main():
     room_min_size = 6
     max_rooms = 30
 
+    fov_algorithm = 'BASIC'
+    fov_light_walls = True
+    fov_radius = 10
+
     game_colors = {
         'dark_wall': (0, 0, 100),
-        'dark_ground': (50, 50, 150)
+        'dark_ground': (50, 50, 150),
+        'light_wall': (130, 110, 50),
+        'light_ground': (200, 180, 50)
     }
 
     player = Entity(int(screen_width / 2), int(screen_height / 2), '@', colors.white)
@@ -31,19 +37,25 @@ def main():
     con = tdl.Console(screen_width, screen_height)
 
     # create map
-    game_map = tdl.map.Map(map_width, map_height)
+    game_map = GameMap(map_width, map_height)
     make_map(game_map, max_rooms, room_min_size, room_max_size, map_width, map_height, player)
+
+    fov_recompute = True
 
     # MAIN GAME LOOP
 
     while not tdl.event.is_window_closed():
+        if fov_recompute:
+            game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
         # render all entities
-        render_all(con, entities, game_map, root_console, screen_width, screen_height, game_colors)
+        render_all(con, entities, game_map, fov_recompute, root_console, screen_width, screen_height, game_colors)
 
         tdl.flush()
 
         # clear entities last position
         clear_all(con, entities)
+
+        fov_recompute = False
 
         # event handling
         for event in tdl.event.get():
@@ -66,6 +78,8 @@ def main():
             dx, dy = move
             if game_map.walkable[player.x + dx, player.y + dy]:
                 player.move(dx, dy)
+
+                fov_recompute = True
 
         if exit:  # exit game
             return True

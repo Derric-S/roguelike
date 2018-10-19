@@ -1,4 +1,13 @@
+from tdl.map import Map
 from random import randint
+
+
+class GameMap(Map):
+    # slight modification of the tdl.map function; adds explored
+    def __init__(self, width, height):
+        super().__init__(width, height)
+        self.explored = [[False for y in range(height)] for x in range(width)]
+
 
 class Rect:
     def __init__(self, x, y, w, h):
