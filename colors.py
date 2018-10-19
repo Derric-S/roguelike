@@ -218,3 +218,7 @@ silver=(203,203,203)
 # miscellaneous
 celadon=(172,255,175)
 peach=(255,159,127)
+dark_wall=(0, 0, 100)
+dark_ground=(50, 50, 150)
+light_wall=(130, 110, 50)
+light_ground=(200, 180, 50)
