@@ -1,5 +1,7 @@
 import tdl
 import colors
+
+from components.fighter import Fighter
 from entity import Entity, get_blocking_entities_at_location
 from game_states import GameStates
 from input_handler import handle_keys
@@ -24,7 +26,8 @@ def main():
 
 	max_monster_per_room = 3
 
-	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True)
+	fighter_component = Fighter(hp=30, defense=2, power=5)
+	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True, fighter=fighter_component)
 	entities = [player]  # list to store all entities on map
 
 	tdl.set_font('arial10x10.png', greyscale=True, altLayout=True)
@@ -51,7 +54,7 @@ def main():
 
 		tdl.flush()
 
-		# clear entities last position
+		# clear entities last positions
 		clear_all(con, entities)
 
 		fov_recompute = False
@@ -73,7 +76,7 @@ def main():
 		exit_game = action.get('exit')
 		fullscreen = action.get('fullscreen')
 
-		if move and game_state == GameStates.PLAYERS_TURN:  # move key pressed
+		if move and game_state == GameStates.PLAYERS_TURN:
 			dx, dy = move
 			destination_x = player.x + dx
 			destination_y = player.y + dy
@@ -82,7 +85,7 @@ def main():
 				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
 
 				if target:
-					print('You kick the ' + target.name + ' in the shins, much to its annoyance!')
+					player.fighter.attack(target)
 				else:
 					player.move(dx, dy)
 
@@ -90,16 +93,16 @@ def main():
 
 				game_state = GameStates.ENEMY_TURN
 
-		if exit_game:  # exit game
+		if exit_game:
 			return True
 
-		if fullscreen:  # set fullscreen
+		if fullscreen:
 			tdl.set_fullscreen(not tdl.get_fullscreen())
 
 		if game_state == GameStates.ENEMY_TURN:
 			for entity in entities:
-				if entity != player:
-					print('The ' + entity.name + ' ponders the meaning of its existence.')
+				if entity.ai:
+					entity.ai.take_turn(player, game_map, entities)
 
 			game_state = GameStates.PLAYERS_TURN
 
