@@ -36,8 +36,8 @@ def render_bar(panel, x, y, total_width, name, value, maximum, bar_color, back_c
 	panel.draw_str(x_centered, y, text, fg=string_color, bg=None)
 
 
-def render_all(con, panel, entities, player, game_map, fov_recompute, root_console, message_log, screen_width,
-			   screen_height, bar_width, panel_height, panel_y, mouse_coordinates):
+def render_all(con, panel, mouse_console, entities, player, game_map, fov_recompute, root_console, message_log,
+			   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path):
 
 	if fov_recompute:
 		# draw all tiles in map
@@ -66,7 +66,7 @@ def render_all(con, panel, entities, player, game_map, fov_recompute, root_conso
 
 	root_console.blit(con, 0, 0, screen_width, screen_height, 0, 0)
 
-	panel.clear(fg=colors.white, bg=colors.black)
+	panel.clear(fg=colors.white, bg=colors.darker_grey)
 
 	# print game messages one line at a time
 	y = 1
@@ -77,9 +77,21 @@ def render_all(con, panel, entities, player, game_map, fov_recompute, root_conso
 	render_bar(panel, 1, 1, bar_width, 'HP', player.fighter.hp, player.fighter.max_hp,
 			   colors.light_red, colors.darker_red, colors.white)
 
-	panel.draw_str(1, 0, get_names_under_mouse(mouse_coordinates, entities, game_map))
+	panel.draw_str(1, 0, get_names_under_mouse(mouse_coordinates, entities, game_map), bg=colors.darker_grey)
 
 	root_console.blit(panel, 0, panel_y, screen_width, panel_height, 0, 0)
+
+	# highlight path to mouse position
+	mouse_x, mouse_y = mouse_coordinates
+	try:
+		if game_map.explored[mouse_x][mouse_y]:
+			mouse_console.clear(bg=colors.lightest_green)
+			for x, y in path:
+				root_console.blit(mouse_console, x, y, width=None, height=None)
+			root_console.blit(mouse_console, mouse_x, mouse_y, width=None, height=None)
+	except IndexError:
+		pass
+
 
 def clear_all(con, entities):
 	for entity in entities:
