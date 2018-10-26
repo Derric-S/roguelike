@@ -13,8 +13,8 @@ from game_messages import MessageLog
 
 def main():
 	# initializations
-	screen_width = 80
-	screen_height = 50
+	screen_width = 100
+	screen_height = 70
 
 	bar_width = 20
 	panel_height = 7
@@ -31,7 +31,7 @@ def main():
 	room_min_size = 6
 	max_rooms = 30
 
-	fov_algorithm = 'BASIC'
+	fov_algorithm = 'DIAMOND'
 	fov_light_walls = True
 	fov_radius = 10
 
@@ -47,6 +47,7 @@ def main():
 	root_console = tdl.init(screen_width, screen_height, title='Roguelike')
 	con = tdl.Console(screen_width, screen_height)
 	panel = tdl.Console(screen_width, panel_height)
+	mouse_console = tdl.Console(1, 1)
 
 	# create map
 	game_map = GameMap(map_width, map_height)
@@ -59,6 +60,8 @@ def main():
 
 	mouse_coordinates = (0, 0)
 
+	highlight_path = False
+
 	game_state = GameStates.PLAYERS_TURN
 
 	# MAIN GAME LOOP
@@ -67,9 +70,15 @@ def main():
 		if fov_recompute:
 			game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
 
+		if highlight_path:
+			mouse_location_x, mouse_location_y = mouse_coordinates
+			path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
+		else:
+			path = []
+
 		# render all entities
-		render_all(con, panel, entities, player, game_map, fov_recompute, root_console, message_log, screen_width,
-				   screen_height, bar_width, panel_height, panel_y, mouse_coordinates)
+		render_all(con, panel, mouse_console, entities, player, game_map, fov_recompute, root_console, message_log,
+				   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path)
 
 		tdl.flush()
 
@@ -85,15 +94,23 @@ def main():
 				break
 			elif event.type == 'MOUSEMOTION':
 				mouse_coordinates = event.cell
+			elif event.type == 'MOUSEDOWN':
+				if event.button == 'LEFT':
+					user_input = event
+					break
+				elif event.button == 'MIDDLE':
+					highlight_path = not highlight_path
+
 		else:
 			user_input = None
 
 		if not user_input:
 			continue
 
-		action = handle_keys(user_input)  # check what key was pressed
+		action = handle_keys(user_input)  # check what was pressed
 
 		move = action.get('move')
+		mouse_move = action.get('mouse move')
 		exit_game = action.get('exit')
 		fullscreen = action.get('fullscreen')
 
@@ -104,7 +121,12 @@ def main():
 			destination_x = player.x + dx
 			destination_y = player.y + dy
 
-			if game_map.walkable[destination_x, destination_y]:
+			if destination_x == player.x and destination_y == player.y:
+				# player is waiting
+				fov_recompute = True
+				game_state = GameStates.ENEMY_TURN
+
+			elif game_map.walkable[destination_x, destination_y]:
 				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
 
 				if target:
@@ -116,6 +138,38 @@ def main():
 					fov_recompute = True
 
 				game_state = GameStates.ENEMY_TURN
+
+		if mouse_move and game_state == GameStates.PLAYERS_TURN:
+			mouse_location_x, mouse_location_y = mouse_move
+
+			if mouse_location_x == player.x and mouse_location_y == player.y:
+				# player is waiting
+				fov_recompute = True
+				game_state = GameStates.ENEMY_TURN
+
+			elif game_map.walkable[mouse_location_x, mouse_location_y]:
+				path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
+
+				destination_x = path[0][0]
+				destination_y = path[0][1]
+
+				dx = path[0][0] - player.x
+				dy = path[0][1] - player.y
+
+				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
+
+				if target:
+					attack_results = player.fighter.attack(target)
+					player_turn_results.extend(attack_results)
+				else:
+					player.move(dx, dy)
+
+					fov_recompute = True
+
+				game_state = GameStates.ENEMY_TURN
+
+			else:
+				continue
 
 		if exit_game:
 			return True

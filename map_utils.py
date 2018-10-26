@@ -8,7 +8,6 @@ from components.fighter import Fighter
 from render_functions import RenderOrder
 
 
-
 class GameMap(Map):
 	# slight modification of the tdl.map function; adds explored
 	def __init__(self, width, height):
