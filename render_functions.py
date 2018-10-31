@@ -1,5 +1,7 @@
 import colors
 from enum import Enum
+from game_states import GameStates
+from menus import inventory_menu
 
 
 class RenderOrder(Enum):
@@ -37,7 +39,7 @@ def render_bar(panel, x, y, total_width, name, value, maximum, bar_color, back_c
 
 
 def render_all(con, panel, mouse_console, entities, player, game_map, fov_recompute, root_console, message_log,
-			   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path):
+			   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path, game_state):
 
 	if fov_recompute:
 		# draw all tiles in map
@@ -81,14 +83,17 @@ def render_all(con, panel, mouse_console, entities, player, game_map, fov_recomp
 
 	root_console.blit(panel, 0, panel_y, screen_width, panel_height, 0, 0)
 
+	if game_state == GameStates.SHOW_INVENTORY:
+		inventory_menu(con, root_console, 'Press the key next to an item to use it, or Esc to cancel.\n',
+					   player.inventory, 50, screen_width, screen_height)
+
 	# highlight path to mouse position
 	mouse_x, mouse_y = mouse_coordinates
 	try:
 		if game_map.explored[mouse_x][mouse_y]:
 			mouse_console.clear(bg=colors.lightest_green)
 			for x, y in path:
-				root_console.blit(mouse_console, x, y, width=None, height=None)
-			root_console.blit(mouse_console, mouse_x, mouse_y, width=None, height=None)
+				root_console.blit(mouse_console, x, y, width=None, height=None, bg_alpha=0.4)
 	except IndexError:
 		pass
 

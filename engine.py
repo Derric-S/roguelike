@@ -2,13 +2,14 @@ import tdl
 import colors
 
 from components.fighter import Fighter
+from components.inventory import Inventory
 from entity import Entity, get_blocking_entities_at_location
 from game_states import GameStates
 from input_handler import handle_keys
 from render_functions import clear_all, render_all, RenderOrder
 from map_utils import GameMap, make_map
 from death_functions import kill_monster, kill_player
-from game_messages import MessageLog
+from game_messages import Message, MessageLog
 
 
 def main():
@@ -31,18 +32,20 @@ def main():
 	room_min_size = 6
 	max_rooms = 30
 
-	fov_algorithm = 'DIAMOND'
+	fov_algorithm = 'RESTRICTIVE'
 	fov_light_walls = True
 	fov_radius = 10
 
 	max_monster_per_room = 3
+	max_items_per_room = 2
 
 	fighter_component = Fighter(hp=30, defense=2, power=5)
+	inventory_component = Inventory(26)
 	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True,
-					render_order=RenderOrder.ACTOR, fighter=fighter_component)
+					render_order=RenderOrder.ACTOR, fighter=fighter_component, inventory=inventory_component)
 	entities = [player]  # list to store all entities on map
 
-	tdl.set_font('arial10x10.png', greyscale=True, altLayout=True)
+	tdl.set_font('arial12x12.png', greyscale=True, altLayout=True)
 
 	root_console = tdl.init(screen_width, screen_height, title='Roguelike')
 	con = tdl.Console(screen_width, screen_height)
@@ -52,17 +55,19 @@ def main():
 	# create map
 	game_map = GameMap(map_width, map_height)
 	make_map(game_map, max_rooms, room_min_size, room_max_size, map_width, map_height, player,
-			 entities, max_monster_per_room)
+			 entities, max_monster_per_room, max_items_per_room)
 
 	fov_recompute = True
 
 	message_log = MessageLog(message_x, message_width, message_height)
 
 	mouse_coordinates = (0, 0)
+	mouse_location_x, mouse_location_y = mouse_coordinates
 
 	highlight_path = False
 
 	game_state = GameStates.PLAYERS_TURN
+	previous_game_state = game_state
 
 	# MAIN GAME LOOP
 
@@ -71,14 +76,13 @@ def main():
 			game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
 
 		if highlight_path:
-			mouse_location_x, mouse_location_y = mouse_coordinates
 			path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
 		else:
-			path = []
+			path = [(mouse_location_x, mouse_location_y)]
 
 		# render all entities
 		render_all(con, panel, mouse_console, entities, player, game_map, fov_recompute, root_console, message_log,
-				   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path)
+				   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path, game_state)
 
 		tdl.flush()
 
@@ -94,6 +98,7 @@ def main():
 				break
 			elif event.type == 'MOUSEMOTION':
 				mouse_coordinates = event.cell
+				mouse_location_x, mouse_location_y = mouse_coordinates
 			elif event.type == 'MOUSEDOWN':
 				if event.button == 'LEFT':
 					user_input = event
@@ -107,54 +112,43 @@ def main():
 		if not user_input:
 			continue
 
-		action = handle_keys(user_input)  # check what was pressed
+		action = handle_keys(user_input, game_state)  # check what was pressed
 
 		move = action.get('move')
 		mouse_move = action.get('mouse move')
+		pickup = action.get('pickup')
+		show_inventory = action.get('show inventory')
+		inventory_index = action.get('inventory index')
 		exit_game = action.get('exit')
 		fullscreen = action.get('fullscreen')
 
 		player_turn_results = []
 
-		if move and game_state == GameStates.PLAYERS_TURN:
-			dx, dy = move
-			destination_x = player.x + dx
-			destination_y = player.y + dy
+		if (move or mouse_move) and game_state == GameStates.PLAYERS_TURN:
+			# make variables based on type of move
+			if move:
+				dx, dy = move
 
+				destination_x = player.x + dx
+				destination_y = player.y + dy
+			else:
+				destination_x, destination_y = mouse_move
+
+			# Do checks and move player / attack
 			if destination_x == player.x and destination_y == player.y:
 				# player is waiting
 				fov_recompute = True
 				game_state = GameStates.ENEMY_TURN
 
 			elif game_map.walkable[destination_x, destination_y]:
-				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
+				if mouse_move:
+					path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
 
-				if target:
-					attack_results = player.fighter.attack(target)
-					player_turn_results.extend(attack_results)
-				else:
-					player.move(dx, dy)
+					dx = path[0][0] - player.x
+					dy = path[0][1] - player.y
 
-					fov_recompute = True
-
-				game_state = GameStates.ENEMY_TURN
-
-		if mouse_move and game_state == GameStates.PLAYERS_TURN:
-			mouse_location_x, mouse_location_y = mouse_move
-
-			if mouse_location_x == player.x and mouse_location_y == player.y:
-				# player is waiting
-				fov_recompute = True
-				game_state = GameStates.ENEMY_TURN
-
-			elif game_map.walkable[mouse_location_x, mouse_location_y]:
-				path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
-
-				destination_x = path[0][0]
-				destination_y = path[0][1]
-
-				dx = path[0][0] - player.x
-				dy = path[0][1] - player.y
+					destination_x = path[0][0]
+					destination_y = path[0][1]
 
 				target = get_blocking_entities_at_location(entities, destination_x, destination_y)
 
@@ -168,11 +162,29 @@ def main():
 
 				game_state = GameStates.ENEMY_TURN
 
+		elif pickup and game_state == GameStates.PLAYERS_TURN:
+			for entity in entities:
+				if entity.item and entity.x == player.x and entity.y == player.y:
+					pickup_results = player.inventory.add_item(entity)
+					player_turn_results.extend(pickup_results)
+					break
 			else:
-				continue
+				message_log.add_message(Message('There is nothing here to pick up.', colors.yellow))
+
+		if show_inventory:
+			previous_game_state = game_state
+			game_state = GameStates.SHOW_INVENTORY
+
+		if inventory_index is not None and previous_game_state != GameStates.PLAYER_DEAD and inventory_index < len(
+				player.inventory.items):
+			item = player.inventory.items[inventory_index]
+			player_turn_results.extend(player.inventory.use(item))
 
 		if exit_game:
-			return True
+			if game_state == GameStates.SHOW_INVENTORY:
+				game_state = previous_game_state
+			else:
+				return True
 
 		if fullscreen:
 			tdl.set_fullscreen(not tdl.get_fullscreen())
@@ -180,6 +192,8 @@ def main():
 		for player_turn_result in player_turn_results:
 			message = player_turn_result.get('message')
 			dead_entity = player_turn_result.get('dead')
+			item_added = player_turn_result.get('item_added')
+			item_consumed = player_turn_result.get('consumed')
 
 			if message:
 				message_log.add_message(message)
@@ -192,6 +206,14 @@ def main():
 					message = kill_monster(dead_entity)
 
 				message_log.add_message(message)
+
+			if item_added:
+				entities.remove(item_added)
+
+				game_state = GameStates.ENEMY_TURN
+
+			if item_consumed:
+				game_state = GameStates.ENEMY_TURN
 
 		if game_state == GameStates.ENEMY_TURN:
 			for entity in entities:
