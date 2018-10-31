@@ -17,7 +17,7 @@ class Inventory:
 			})
 		else:
 			results.append({
-				'item_added': item,
+				'item added': item,
 				'message': Message('You pick up the {0}!'.format(item.name), colors.lighter_blue)
 			})
 			self.items.append(item)
@@ -45,3 +45,15 @@ class Inventory:
 
 	def remove_item(self, item):
 		self.items.remove(item)
+
+	def drop_item(self, item):
+		results = []
+
+		item.x = self.owner.x
+		item.y = self.owner.y
+
+		self.remove_item(item)
+		results.append({'item dropped': item, 'message': Message('You dropped the {0}'.format(item.name),
+																 colors.yellow)})
+
+		return results

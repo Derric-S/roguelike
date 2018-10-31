@@ -6,7 +6,7 @@ def handle_keys(user_input, game_state):
 		return handle_player_turn_keys(user_input)
 	elif game_state == GameStates.PLAYER_DEAD:
 		return handle_player_dead_keys(user_input)
-	elif game_state == GameStates.SHOW_INVENTORY:
+	elif game_state in (GameStates.SHOW_INVENTORY, GameStates.DROP_INVENTORY):
 		return handle_inventory_keys(user_input)
 
 	return {}
@@ -44,6 +44,8 @@ def handle_player_turn_keys(user_input):
 			return {'pickup': True}
 		elif key_char == 'i':
 			return{'show inventory': True}
+		elif key_char == 'd':
+			return {'drop inventory': True}
 
 		# other keys
 		if key_char == 'ENTER' and user_input.alt:

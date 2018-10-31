@@ -83,9 +83,13 @@ def render_all(con, panel, mouse_console, entities, player, game_map, fov_recomp
 
 	root_console.blit(panel, 0, panel_y, screen_width, panel_height, 0, 0)
 
-	if game_state == GameStates.SHOW_INVENTORY:
-		inventory_menu(con, root_console, 'Press the key next to an item to use it, or Esc to cancel.\n',
-					   player.inventory, 50, screen_width, screen_height)
+	if game_state in (GameStates.SHOW_INVENTORY, GameStates.DROP_INVENTORY):
+		if game_state == GameStates.SHOW_INVENTORY:
+			inventory_title = 'Press the key next to an item to use it, or Esc to cancel. \n'
+		else:
+			inventory_title = 'Press the key next to an item to drop it , or Esc to cancel. \n'
+
+		inventory_menu(con, root_console, inventory_title, player.inventory, 50, screen_width, screen_height)
 
 	# highlight path to mouse position
 	mouse_x, mouse_y = mouse_coordinates
