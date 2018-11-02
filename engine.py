@@ -5,7 +5,7 @@ from components.fighter import Fighter
 from components.inventory import Inventory
 from entity import Entity, get_blocking_entities_at_location
 from game_states import GameStates
-from input_handler import handle_keys
+from input_handler import handle_keys, handle_mouse
 from render_functions import clear_all, render_all, RenderOrder
 from map_utils import GameMap, make_map
 from death_functions import kill_monster, kill_player
@@ -37,9 +37,9 @@ def main():
 	fov_radius = 10
 
 	max_monster_per_room = 3
-	max_items_per_room = 2
+	max_items_per_room = 7
 
-	fighter_component = Fighter(hp=30, defense=2, power=5)
+	fighter_component = Fighter(hp=70, defense=2, power=6)
 	inventory_component = Inventory(26)
 	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True,
 					render_order=RenderOrder.ACTOR, fighter=fighter_component, inventory=inventory_component)
@@ -68,6 +68,8 @@ def main():
 
 	game_state = GameStates.PLAYERS_TURN
 	previous_game_state = game_state
+
+	targeting_item = None
 
 	# MAIN GAME LOOP
 
@@ -100,32 +102,33 @@ def main():
 				mouse_coordinates = event.cell
 				mouse_location_x, mouse_location_y = mouse_coordinates
 			elif event.type == 'MOUSEDOWN':
-				if event.button == 'LEFT':
-					user_input = event
-					break
-				elif event.button == 'MIDDLE':
-					highlight_path = not highlight_path
+				user_mouse_input = event
+				break
 
 		else:
 			user_input = None
+			user_mouse_input = None
 
-		if not user_input:
+		if not (user_input or user_mouse_input):
 			continue
 
 		action = handle_keys(user_input, game_state)  # check what was pressed
+		mouse_action = handle_mouse(user_mouse_input)
 
 		move = action.get('move')
-		mouse_move = action.get('mouse move')
 		pickup = action.get('pickup')
 		show_inventory = action.get('show inventory')
 		inventory_index = action.get('inventory index')
 		drop_inventory = action.get('drop inventory')
-		exit_game = action.get('exit')
+		exit = action.get('exit')
 		fullscreen = action.get('fullscreen')
+
+		left_click = mouse_action.get('left_click')
+		right_click = mouse_action.get('right_click')
 
 		player_turn_results = []
 
-		if (move or mouse_move) and game_state == GameStates.PLAYERS_TURN:
+		if (move or left_click) and game_state == GameStates.PLAYERS_TURN:
 			# make variables based on type of move
 			if move:
 				dx, dy = move
@@ -133,7 +136,7 @@ def main():
 				destination_x = player.x + dx
 				destination_y = player.y + dy
 			else:
-				destination_x, destination_y = mouse_move
+				destination_x, destination_y = left_click
 
 			# Do checks and move player / attack
 			if destination_x == player.x and destination_y == player.y:
@@ -142,7 +145,7 @@ def main():
 				game_state = GameStates.ENEMY_TURN
 
 			elif game_map.walkable[destination_x, destination_y]:
-				if mouse_move:
+				if left_click:
 					path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
 
 					dx = path[0][0] - player.x
@@ -185,13 +188,25 @@ def main():
 			item = player.inventory.items[inventory_index]
 
 			if game_state == GameStates.SHOW_INVENTORY:
-				player_turn_results.extend(player.inventory.use(item))
+				player_turn_results.extend(player.inventory.use(item, entities=entities, game_map=game_map))
 			elif game_state == GameStates.DROP_INVENTORY:
 				player_turn_results.extend(player.inventory.drop_item(item))
 
-		if exit_game:
+		if game_state == GameStates.TARGETING:
+			if left_click:
+				target_x, target_y = left_click
+
+				item_use_results = player.inventory.use(targeting_item, entities=entities, game_map=game_map,
+														target_x=target_x, target_y=target_y)
+				player_turn_results.extend(item_use_results)
+			elif right_click:
+				player_turn_results.append({'targeting_cancelled': True})
+
+		if exit:
 			if game_state in (GameStates.SHOW_INVENTORY, GameStates.DROP_INVENTORY):
 				game_state = previous_game_state
+			elif game_state == GameStates.TARGETING:
+				player_turn_results.append({'targeting_cancelled': True})
 			else:
 				return True
 
@@ -204,9 +219,16 @@ def main():
 			item_added = player_turn_result.get('item added')
 			item_consumed = player_turn_result.get('consumed')
 			item_dropped = player_turn_result.get('item dropped')
+			targeting = player_turn_result.get('targeting')
+			targeting_cancelled = player_turn_result.get('targeting_cancelled')
 
 			if message:
 				message_log.add_message(message)
+
+			if targeting_cancelled:
+				game_state = previous_game_state
+
+				message_log.add_message(Message('Targeting cancelled'))
 
 			if dead_entity:
 				if dead_entity == player:
@@ -229,6 +251,13 @@ def main():
 				entities.append(item_dropped)
 
 				game_state = GameStates.ENEMY_TURN
+
+			if targeting:
+				previous_game_state = GameStates.PLAYERS_TURN
+				game_state = GameStates.TARGETING
+
+				targeting_item = targeting
+				message_log.add_message(targeting_item.item.targeting_message)
 
 		if game_state == GameStates.ENEMY_TURN:
 			for entity in entities:
