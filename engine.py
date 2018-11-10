@@ -1,81 +1,110 @@
 import tdl
 import colors
 
-from components.fighter import Fighter
-from components.inventory import Inventory
-from entity import Entity, get_blocking_entities_at_location
+from tcod import image_load
+
+from entity import get_blocking_entities_at_location
 from game_states import GameStates
-from input_handler import handle_keys, handle_mouse
-from render_functions import clear_all, render_all, RenderOrder
-from map_utils import GameMap, make_map
+from input_handler import handle_keys, handle_mouse, handle_main_menu
+from render_functions import clear_all, render_all
 from death_functions import kill_monster, kill_player
-from game_messages import Message, MessageLog
+from game_messages import Message
+from loader_functions.initialize_new_game import get_constants, get_game_variables
+from loader_functions.data_loaders import load_game, save_game
+from menus import main_menu, message_box
 
 
 def main():
-	# initializations
-	screen_width = 100
-	screen_height = 70
-
-	bar_width = 20
-	panel_height = 7
-	panel_y = screen_height - panel_height
-
-	message_x = bar_width + 2
-	message_width = screen_width - bar_width - 2
-	message_height = panel_height - 1
-
-	map_width = 80
-	map_height = 43
-
-	room_max_size = 10
-	room_min_size = 6
-	max_rooms = 30
-
-	fov_algorithm = 'RESTRICTIVE'
-	fov_light_walls = True
-	fov_radius = 10
-
-	max_monster_per_room = 3
-	max_items_per_room = 7
-
-	fighter_component = Fighter(hp=70, defense=2, power=6)
-	inventory_component = Inventory(26)
-	player = Entity(0, 0, '@', colors.white, 'Player', blocks=True,
-					render_order=RenderOrder.ACTOR, fighter=fighter_component, inventory=inventory_component)
-	entities = [player]  # list to store all entities on map
+	constants = get_constants()
 
 	tdl.set_font('arial12x12.png', greyscale=True, altLayout=True)
 
-	root_console = tdl.init(screen_width, screen_height, title='Roguelike')
-	con = tdl.Console(screen_width, screen_height)
-	panel = tdl.Console(screen_width, panel_height)
+	root_console = tdl.init(constants['screen_width'], constants['screen_height'], title=constants['window_title'])
+	con = tdl.Console(constants['screen_width'], constants['screen_height'])
+	panel = tdl.Console(constants['screen_width'], constants['panel_height'])
 	mouse_console = tdl.Console(1, 1)
 
-	# create map
-	game_map = GameMap(map_width, map_height)
-	make_map(game_map, max_rooms, room_min_size, room_max_size, map_width, map_height, player,
-			 entities, max_monster_per_room, max_items_per_room)
+	player = None
+	entities = []
+	game_map = None
+	message_log = None
+	game_state = None
+
+	show_main_menu = True
+	show_load_error_message = False
+
+	main_menu_background_image = image_load('menu_background.png')
+
+	while not tdl.event.is_window_closed():
+		for event in tdl.event.get():
+			if event.type == 'KEYDOWN':
+				user_input = event
+				break
+		else:
+			user_input = None
+
+		if show_main_menu:
+			main_menu(con, root_console, main_menu_background_image, constants['screen_width'],
+					  constants['screen_height'])
+
+			if show_load_error_message:
+				message_box(con, root_console, 'No save game', 50, constants['screen_width'],
+							constants['screen_height'])
+
+			tdl.flush()
+
+			action = handle_main_menu(user_input)
+
+			new_game = action.get('new_game')
+			load_saved_game = action.get('load_game')
+			exit_game = action.get('exit')
+
+			if show_load_error_message and (new_game or load_saved_game or exit_game):
+				show_load_error_message = False
+			elif new_game:
+				player, entities, game_map, message_log, game_state = get_game_variables(constants)
+				game_state = GameStates.PLAYERS_TURN
+
+				show_main_menu = False
+			elif load_saved_game:
+				try:
+					player, entities, game_map, message_log, game_state = load_game()
+					show_main_menu = False
+				except FileNotFoundError:
+					show_load_error_message = True
+			elif exit_game:
+				break
+
+		else:
+			root_console.clear()
+			con.clear()
+			panel.clear()
+			play_game(player, entities, game_map, message_log, game_state, root_console, con, panel, mouse_console,
+					  constants)
+
+			show_main_menu = True
+
+
+def play_game(player, entities, game_map, message_log, game_state, root_console, con, panel, mouse_console, constants):
+	tdl.set_font('arial12x12.png', greyscale=True, altLayout=True)
 
 	fov_recompute = True
 
-	message_log = MessageLog(message_x, message_width, message_height)
+	previous_game_state = game_state
+
+	targeting_item = None
 
 	mouse_coordinates = (0, 0)
 	mouse_location_x, mouse_location_y = mouse_coordinates
 
 	highlight_path = False
 
-	game_state = GameStates.PLAYERS_TURN
-	previous_game_state = game_state
-
-	targeting_item = None
-
 	# MAIN GAME LOOP
 
 	while not tdl.event.is_window_closed():
 		if fov_recompute:
-			game_map.compute_fov(player.x, player.y, fov=fov_algorithm, radius=fov_radius, light_walls=fov_light_walls)
+			game_map.compute_fov(player.x, player.y, fov=constants['fov_algorithm'], radius=constants['fov_radius'],
+								 light_walls=constants['fov_light_walls'])
 
 		if highlight_path:
 			path = game_map.compute_path(player.x, player.y, mouse_location_x, mouse_location_y)
@@ -84,7 +113,8 @@ def main():
 
 		# render all entities
 		render_all(con, panel, mouse_console, entities, player, game_map, fov_recompute, root_console, message_log,
-				   screen_width, screen_height, bar_width, panel_height, panel_y, mouse_coordinates, path, game_state)
+				   constants['screen_width'], constants['screen_height'], constants['bar_width'],
+				   constants['panel_height'], constants['panel_y'], mouse_coordinates, path, game_state)
 
 		tdl.flush()
 
@@ -208,6 +238,8 @@ def main():
 			elif game_state == GameStates.TARGETING:
 				player_turn_results.append({'targeting_cancelled': True})
 			else:
+				save_game(player, entities, game_map, message_log, game_state)
+
 				return True
 
 		if fullscreen:
